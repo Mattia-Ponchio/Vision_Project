@@ -1,0 +1,33 @@
+FROM ubuntu:18.04
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.6, system dependencies, and OpenCV dependencies
+RUN apt-get update && apt-get install -y \
+    python3.6 \
+    python3-pip \
+    python3.6-dev \
+    git \
+    wget \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Update pip for Python 3.6
+RUN python3.6 -m pip install --upgrade "pip<21.0"
+
+# Install legacy PyTorch 0.4.1 (CPU wheel) and compatible torchvision/pillow
+RUN python3.6 -m pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-linux_x86_64.whl
+RUN python3.6 -m pip install torchvision==0.2.1 pillow==5.2.0
+
+# Install remaining compatible computer vision / post-processing dependencies
+RUN python3.6 -m pip install \
+    "numpy==1.19.5" \
+    "scipy==1.5.4" \
+    "opencv-python==4.5.5.64" \
+    pyamg
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

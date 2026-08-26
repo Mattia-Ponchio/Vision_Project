@@ -1,0 +1,14 @@
+HOW TO USE THIS DOCKER TO RUN THE IIZUKA MODEL
+
+1) Only once, create the docker image using the dockerfile, with the command:
+	docker build -t siggraph2017-inpainting .
+	
+2) In the same folder of the dockerfile, put the python files 'inpaint.py',
+'utils.py' and the weights 'completionnet_places2.t7'. Put also the image(s) and mask(s) for the inpainting procedure.
+
+3) run the docker container with command:
+	docker run -it -v "$(pwd):/workspace" siggraph2017-inpainting
+	
+4) run the model with:
+	python3.6 inpaint.py --input image_name.png --mask mask_name.png
+If you want to change the weights, change them directly in the code or use the '--model_path' <path> option.

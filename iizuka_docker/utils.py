@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 
+# this function is used to convert a tensor to a cv2 image
 def tensor2cvimg(src):
     '''return np.array
         uint8
@@ -15,10 +16,12 @@ def tensor2cvimg(src):
 
     return out
 
-def cvimg2tensor(src):
+
+# this function is used to convert a cv2 image to a tensor (inverse of above function)
+def cvimg2tensor(src): 
     out = src.copy()
-    out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
-    out = out.transpose((2,0,1)).astype(np.float64)
+    out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)      # we change the color space from BGR to RGB, because the model was trained on RGB images
+    out = out.transpose((2,0,1)).astype(np.float64) # we change the order of the dimensions from (H, W, C) to (C, H, W)
     out = out / 255
 
     return out

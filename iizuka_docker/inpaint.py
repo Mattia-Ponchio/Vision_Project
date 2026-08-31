@@ -45,6 +45,13 @@ datamean = data.mean              # the model expects normalized input
 
 # ====================================
 # DEALING WITH THE INPUT IMAGE AND MASK
+"""
+Input image must be a 3-channel RGB image. OpenCV handles JPG, PNG, BMP, etc.
+It can accept arbitrary spatial sizes (square, rectangular...), 
+with any dimension, even if the model was trained on 256 × 256 patches
+"""
+
+
 # loading input image
 input_img = cv2.imread(opt.input)                      # load input image in format: bgr (not rgb!), (H, W, C)
 I = torch.from_numpy(cvimg2tensor(input_img)).float()  # from image to tensor

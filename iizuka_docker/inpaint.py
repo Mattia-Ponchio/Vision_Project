@@ -64,6 +64,11 @@ if opt.mask != 'none':  # if the user has provided a mask, we load it
     # binarization of the mask:
     M[M <= 0.2] = 0.0
     M[M > 0.2] = 1.0
+
+    # ===================================
+    M = 1.0 - M # !!!! added only cause the created masks have 0s in the hole region and 1s in the untouched region, but the model expects the opposite
+    # ===================================
+
     M = M.view(1, M.size(0), M.size(1)) # reshaping the mask to have the same dimensions as the input mask 
     assert I.size(1) == M.size(1) and I.size(2) == M.size(2) # sanity check
 

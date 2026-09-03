@@ -10,5 +10,7 @@ HOW TO USE THIS DOCKER TO RUN THE IIZUKA MODEL
 	docker run -it -v "$(pwd):/workspace" siggraph2017-inpainting
 	
 4) run the model with:
-	python3.6 inpaint.py --input image_name.png --mask mask_name.png
-If you want to change the weights, change them directly in the code or use the '--model_path' <path> option.
+	python3.6 inpaint.py --input image_name.png --mask mask_name.png                    (single image version)
+	python3.6 inpaint.py --input ./test_images/image_1.jpg --mask ./test_images/1.jpg   (single image version)
+
+	python3.6 inpaint_folders.py --input_dir images --mask_dir masks/circles --output_dir results --postproc   (folders version)

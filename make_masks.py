@@ -4,9 +4,20 @@ import numpy.random as npr
 import random
 from PIL import Image
 
-action_list = [[0, 1], [0, -1], [1, 0], [-1, 0]]
+action_list = [[0, 1], [0, -1], [1, 0], [-1, 0]] # this is the list of possible actions for the random walk: right, left, down, up
 
+"""
+Common inputs to the functions:
+- canvas: a 2D numpy array representing the image mask, initialized with ones (1s) indicating untouched areas
+- ini_x, ini_y: the initial x and y coordinates on the canvas where the mask generation starts
+- borders: the number of pixels from the edges that should remain untouched (1s)
+- looping: a boolean flag indicating whether the mask generation can go beyond the borders of the canvas
+"""
 
+# This function performs a random walk on the canvas starting from (ini_x, ini_y) for a given length. 
+# The walk can either loop around the borders or be constrained within them based on the looping parameter.
+
+# version of rw where length is the number of steps to take in the random walk
 def random_walk(canvas, ini_x, ini_y, length, borders, looping=False):
 	img_size = canvas.shape[-1]
 	r = npr.randint(low = 0, high = len(action_list), size = length)
@@ -40,22 +51,62 @@ def random_walk(canvas, ini_x, ini_y, length, borders, looping=False):
 			y_list[i] = y
 		canvas[x_list, y_list] = 0
 		
-	return canvas
-   
+	return canvas # it outputs the mask where 0s represent the path of the walk and 1s represent untouched areas.
+
+
+# version of rw where target_ratio is exaclty the ratio of pixels to be corrupted
+def random_walk_until_ratio(canvas, ini_x, ini_y, target_ratio, borders):
+    img_size = canvas.shape[-1]
+    target = int(img_size * img_size * target_ratio)
+
+    visited = set()
+
+    x = int(ini_x)
+    y = int(ini_y)
+
+    # enforce borders on start
+    x = np.clip(x, borders, img_size - 1 - borders)
+    y = np.clip(y, borders, img_size - 1 - borders)
+
+    visited.add((x, y))
+    canvas[x, y] = 0
+
+    while len(visited) < target:
+        dx, dy = action_list[npr.randint(0, 4)]
+
+        x_new = x + dx
+        y_new = y + dy
+
+        # enforce borders
+        x = np.clip(x_new, borders, img_size - 1 - borders)
+        y = np.clip(y_new, borders, img_size - 1 - borders)
+
+        visited.add((x, y))
+        canvas[x, y] = 0
+
+    return canvas
+
+
+# This function adds salt and pepper noise to the canvas. 
+# It randomly selects a number of pixels based on the specified ratio and sets them to 0 (black), simulating noise in the image.
+# The 'ratio' input is the fraction of the total number of pixels in the image to corrupt
 def salt_and_pepper(canvas, borders, ratio):
 	img_size = canvas.shape[-1]
 	noise_pixels = int(img_size * img_size * ratio)
 	x = npr.randint(low = borders, high = img_size - 1 - borders, size = noise_pixels)
 	y = npr.randint(low = borders, high = img_size - 1 - borders, size = noise_pixels)
 	canvas[x, y] = 0
-	return canvas
+	return canvas # it outputs the mask where 0s represent the noisy pixels and 1s represent untouched areas.
 
+
+# This function creates a box-shaped region on the canvas.
+# The 'area' input specifies the total number of pixels to be set to 0 (black) in the box, and the function calculates the dimensions of the box accordingly.
 def box(canvas, ini_x, ini_y, borders, area, looping=False):
 	img_size = canvas.shape[-1]
 	base = npr.randint(low=1, high=img_size)
 	height = np.clip(area//base, 1, img_size)
     
-    # Starting point is the vertex in 
+    # Starting point is the vertex in the corner of the box
     # 0 = top left; 1 = top right; 2 = bot left; 3 = bot right
 	orientation = npr.randint(0, 4)
 
@@ -82,8 +133,11 @@ def box(canvas, ini_x, ini_y, borders, area, looping=False):
 
 	canvas[np.ix_(x_indices, y_indices)] = 0
 
-	return canvas
+	return canvas # it outputs the mask where 0s represent the box region and 1s represent untouched areas.
 
+
+# this function creates a circular region on the canvas.
+# The 'radius' input specifies the radius of the circle
 def circles(canvas, ini_x, ini_y, radius, borders, looping=False):
     img_size = canvas.shape[-1]
     
@@ -123,7 +177,7 @@ def circles(canvas, ini_x, ini_y, radius, borders, looping=False):
         
         canvas[circular_mask & valid_zone] = 0
         
-    return canvas
+    return canvas # it outputs the mask where 0s represent the circular region and 1s represent untouched areas.
 
 	
 
@@ -135,10 +189,13 @@ if __name__ == '__main__':
 	parser.add_argument('--N', type=int, default=1000, help = "Number of masks to create, default 1000")
 	parser.add_argument('--borders', type=int, default=0, help = "Number of pixels from the borders that can be corrupted, default 0")
 	parser.add_argument('--save_dir', type=str, default='masks', help = "Saving directory path, default ./masks")
-	parser.add_argument('--mode', type=str, default="all", help = "Mask type:\n box - for rectangular boxes || sap - for salt and pepper noise || circle - for circular masks || all - for random walk masks with the default ratios of noise || rw - for random walk masks with user defined ratio of noise ")
+	parser.add_argument('--mode', type=str, default="all", 
+			help = "Mask type:\n box - for rectangular boxes || sap - for salt and pepper noise || circle - for circular masks || all - for random walk masks with the default ratios of noise || rw - for random walk masks with user defined ratio of noise ")
 	parser.add_argument('--ratio', type=float, default=0.2, help = "Fraction of the total number of pixels in the image to corrupt, default 0.2")
 	parser.add_argument('--loop', action='store_true', help="Whether looping is allowed (include flag to enable)")
 	args = parser.parse_args()
+	# example: python make_masks.py --N 10 --mode circle --ratio 0.2 --loop
+	# python make_masks.py --N 40 --save_dir masks/new_masks --mode sap --ratio 0.1 
 
 	default_ratios = [ [0.01, 0.10], [0.10, 0.20], [0.20, 0.30], [0.30, 0.40], [0.40, 0.50], [0.50, 0.60] ]
 
@@ -215,6 +272,28 @@ if __name__ == '__main__':
 				ini_y = ini_y_list[i]
 				mask = random_walk(canvas, ini_x, ini_y, length, args.borders, args.loop)
 				#print("save:", i, np.sum(mask))
+
+				img = Image.fromarray(mask * 255).convert('1')
+				img.save('{:s}/{:06d}.jpg'.format(args.save_dir, i))
+
+		# added case for random walk with ratio as the number of steps
+		case "rw_ratio":
+			ini_x_list = npr.randint(0 + args.borders,	args.image_size - 1 - args.borders,	args.N)
+			ini_y_list = npr.randint(0 + args.borders,	args.image_size - 1 - args.borders,	args.N)
+
+			for i in range(args.N):
+				canvas = np.ones((args.image_size, args.image_size)).astype("i")
+
+				ini_x = ini_x_list[i]
+				ini_y = ini_y_list[i]
+
+				mask = random_walk_until_ratio(
+					canvas,
+					ini_x,
+					ini_y,
+					args.ratio,
+					args.borders
+				)
 
 				img = Image.fromarray(mask * 255).convert('1')
 				img.save('{:s}/{:06d}.jpg'.format(args.save_dir, i))

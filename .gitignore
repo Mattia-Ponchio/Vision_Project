@@ -1,3 +1,6 @@
+# FILES TO BE IGNORED
+iizuka_docker/images/
+
 # Byte-compiled / optimized / DLL files
 **/__pycache__/
 **/*.py[cod]

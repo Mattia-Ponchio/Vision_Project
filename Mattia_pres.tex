@@ -1,0 +1,222 @@
+\documentclass[aspectratio=43]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+
+%import the theme and packages for the code blocks
+\input{code_blocks_theme.tex}
+
+% Use Unipd as theme, with options:
+% - pageofpages: define the separation symbol of the footer page of pages (e.g.: of, di, /, default: of)
+% - logo: position another logo near the Unipd logo in the title page (e.g. department logo), passing the second logo path as option 
+% Use the environment lastframe to add the endframe text
+\usetheme[pageofpages=of]{Unipd}
+
+\title{A Comparative Study of Image Inpainting Methods
+	under Diverse Masking Conditions\\}
+\subtitle{}
+\author[]{Ponchio Mattia, Secco Benedetto}
+
+\date{15th September 2026}
+
+
+\begin{document}
+	\frame{\titlepage}
+	\section{Partial Convolution}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Partial Convolution}}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Goals}
+		\begin{itemize}
+			\item Independent from hole initialization values.
+			\item No expensive post-processing needed.
+			\item Convolution results depend only on the non-hole regions at every layer, with the masked region being automatically updated at each step.
+			\item Handle both regular and irregular shaped holes, regardless of their proximity to the borders of the image.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Partial Convolutional Layer}
+		\begin{center}			
+			\begin{equation*}
+				x' = \begin{cases}
+					\mathbf{W}^T(\mathbf{X}\odot\mathbf{M})\frac{\text{sum}(\mathbf{1})}{\text{sum}(\mathbf{M})} + b,  & \text{if }  \text{sum}(\mathbf{M})>0  \\
+					0,  & \text{otherwise}
+				\end{cases}
+			\end{equation*}
+			\begin{itemize}
+				\item Mask convention: 0 for masked portion.
+				\item Output values depend only on unmasked inputs.
+				\item Scaling factor to adjust for the varying amount of unmasked inputs.
+				\item If the convolution was able to condition its output on at least one valid input value, then that location becomes valid, expressed with:
+			\end{itemize}
+			\begin{equation*}
+					m' = \begin{cases}
+					1,  & \text{if }  \text{sum}(\mathbf{M})>0  \\
+					0,  & \text{otherwise}
+				\end{cases}
+			\end{equation*}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture Inspiration}
+		\centering
+		\includegraphics[scale=0.14]{images/u-net-architecture.png}
+		\begin{itemize}
+			\item UNet-like architecture: Encoder-Decoder with skip connections.
+		\end{itemize}
+		\small
+		\footnote{Image source: Ronneberger, O., Fischer, P., Brox, T.: U-net: Convolutional networks for biomedical image segmentation. Springer (2015)}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture Details}
+		\begin{itemize}
+			\item Each convolution is transformed into a partial convolution.
+			\item The skip links concatenate two feature maps and two masks respectively, acting as the feature and mask inputs for the next partial convolution layer.
+			\item The last partial convolution layer’s input contains the concatenation of the original input image with hole and original mask, making it possible for the model to copy non-hole pixels.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture Visualization}
+		\centering
+		\includegraphics[width=0.9\textwidth, height=0.85\textheight]{images/Pconv_net.png}
+	\end{frame}
+	
+	
+	\begin{frame}{Loss Function}
+		\centering
+		\begin{equation*}
+				\mathcal{L}_{total} = 
+				\mathcal{L}_{valid} + 6\mathcal{L}_{hole} + 0.05\mathcal{L}_{perceptual}
+				+ 120(\mathcal{L}_{style_{out}} + \mathcal{L}_{style_{comp}}) + 0.1\mathcal{L}_{tv}
+		\end{equation*}
+		\begin{itemize}
+			\item Multiple terms for taking into account both pixel-wise accuracy and perceptual metrics.
+			\item $\mathcal{L}_{hole}$ and $\mathcal{L}_{valid}$ are the $L_1$ losses on the network output for the hole and the non-hole pixels respectively.
+		\end{itemize}
+		\begin{equation*}
+			\mathcal{L}_{perceptual} = \sum_{p=0}^{P-1} \frac{\| \Psi_{p}^{\mathbf{I}_{out}} - \Psi_{p}^{\mathbf{I}_{gt}} \|_1}{N_{\Psi_{p}^{\mathbf{I}_{gt}}}}
+			+ \sum_{p=0}^{P-1} \frac{\|  \Psi_{p}^{\mathbf{I}_{comp}} - \Psi_{p}^{\mathbf{I}_{gt}} \|_1}{N_{\Psi_{p}^{\mathbf{I}_{gt}}}}
+		\end{equation*}
+		\begin{itemize}
+			\item $\mathbf{I}_{comp}$ is the raw output image $\mathbf{I}_{out}$, but with the non-hole pixels directly set to ground truth.
+			\item The perceptual loss computes the $L_1$ distances between both $\mathbf{I}_{out}$ and $\mathbf{I}_{comp}$ and the ground truth, but after projecting these images into higher level feature spaces using an ImageNet-pretrained VGG-16.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Loss function}
+		\centering
+		\begin{itemize}
+			\item The style-loss term is similar to the perceptual loss, but an autocorrelation (Gram matrix) is performed on each feature map before applying the $L_1$.
+			\item As before, $\mathcal{L}_{style_{comp}}$ uses the raw output image but with non-hole pixels set to ground truth.
+			\item The total variation loss $\mathcal{L}_{tv}$ represents the smoothing penalty on $R$, where $R$ is the region of 1-pixel dilation of the hole region, still evaluated using the $L_1$ norm.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Results}
+		content...
+	\end{frame}
+	
+	
+	\section{Contextual Attention}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Contextual Attention}}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Goals}
+		\centering
+		\begin{itemize}
+			\item Combine the ability of deep learning based approaches to generate visually plausible inpainting with patch synthesis methods's to borrow textures from the surrounding regions.
+			\item Deal with multiple holes at arbitrary locations and with variable sizes.
+			\item Integrate attention mechanism in the network: learn where to borrow or copy feature information from known background patches to generate missing patches.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Contextual Attention Layer}
+		\centering
+		\includegraphics[width=\textwidth, height=0.5\textheight]{images/contextual_attention_layer.jpg}
+		\begin{itemize}
+			\item Match features of missing pixels (foreground) to surroundings (background) via cosine similarity $\rightarrow$ weigh it with scaled softmax to get attention score for each pixel.
+			\item Further encourage coherency of attention by propagation (fusion) $\rightarrow$ left-right propagation followed by a top-down propagation with kernel size of k.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture: $1^{st}$ stage}
+		\centering
+		\includegraphics[width=\textwidth, height=0.35\textheight]{images/framework.jpg}
+		\begin{itemize}
+			\item Two-stage coarse-to-fine network architecture where the first network makes an initial coarse prediction, and the second network takes the coarse prediction as inputs and predict refined results.
+			\item The coarse network is a fully convolutional encoder-decoder architecture with dilated convolutions.
+			\item It is trained with the reconstruction loss explicitly; no $BN$ layers and ELU as activation.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Spatially Discounted Loss}
+		\centering
+		\begin{itemize}
+			\item Since the original image is the only ground truth to compute a reconstruction loss, strong enforcement of reconstruction loss in masked pixels may mislead the training process of the convolutional network.
+			\item Missing pixels near the hole boundaries have much less ambiguity than those pixels closer to the center of the hole.
+			\begin{center}
+				$\downarrow$
+			\end{center}
+			\item Weight mask \(\mathbf{M}\) where the weight of each pixel in the mask is computed as \(\gamma^{\ell}\), where \(\ell\) is the distance of the pixel to the nearest known pixel.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture: $2^{nd}$ stage}
+		\centering
+		\includegraphics[width=\textwidth, height=0.35\textheight]{images/unified_attention_network.jpg}
+		\begin{itemize}
+			\item Two parallel encoders: the bottom encoder specifically focuses on hallucinating contents with layer-by-layer (dilated) convolution, while the top one tries to attend on background features of interest.
+			\item Output features from two encoders are aggregated and fed into a single decoder to obtain the final output.
+			\item Color to indicate the relative location of the most interested background patch for each foreground pixel: white means the pixel attends on itself, pink on bottom-left, green on top-right.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{$2^{nd}$ stage Loss}
+		\centering
+		\begin{itemize}
+			\item Reconstruction loss and WGAN-GP loss (on both global and local outputs
+			of the second-stage refinement network to enforce global and local consistency).
+			\item The pixel-wise reconstruction loss directly regresses
+			holes to the current ground truth image, while WGANs implicitly learn to match potentially correct images and train the generator with adversarial gradients.
+			\item The gradient penalty (applied only to pixels inside the holes) contributes to preventing mode collapse and balances the two critics.
+			\item No perceptual, style or total variation losses used, as they do not bring noticeable improvements in this case.
+			\begin{equation*}
+				\begin{split}
+					\min_G \max_{D \in \mathcal{D}} & \mathbb{E}_{\mathbf{x} \sim \mathbb{P}_r}[D(\mathbf{x})] - \mathbb{E}_{\tilde{\mathbf{x}} \sim \mathbb{P}_g}[D(\tilde{\mathbf{x}})] \\
+					& + \lambda \mathbb{E}_{\hat{\mathbf{x}} \sim \mathbb{P}_{\hat{\mathbf{x}}}} \left[ \left( \lVert \nabla_{\hat{\mathbf{x}}} D(\hat{\mathbf{x}}) \odot (\mathbf{1} - \mathbf{m}) \rVert_2 - 1 \right)^2 \right]
+				\end{split}
+			\end{equation*}
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Results}
+		content...
+	\end{frame}
+	
+	
+\end{document}

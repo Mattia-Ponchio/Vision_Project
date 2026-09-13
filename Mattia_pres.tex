@@ -27,6 +27,51 @@
 
 \begin{document}
 	\frame{\titlepage}
+	
+	
+	\section{Introduction}
+	\begin{frame}{Image Inpainting}
+		\centering
+		\begin{itemize}
+			\item Image inpainting is the task of filling in holes in an image.
+			\item In non-blind inpainting, the location of the corrupted pixels is provided in order to fill them with plausible imagery.
+			\item Useful to edit out unwanted objects or generate occluded regions.
+			\item Task has been tackled both with traditional methods (e.g. Biharmonic Equations, PatchMatch) and deep learning networks.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Dataset}
+		\centering
+		\begin{itemize}
+			\item We utilize a subset of the Places365 test set, which contains unique imagery related to 365 scene categories.
+			\item In particular, we consider 200 images from the resized test set, where the images have been resized to $256 * 256$ regardless of the original aspect ratio.
+			\item For \textit{each} image, we consider its combination with each one of our 48 masks, totaling 9600 unique inputs to the networks
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Masks}
+		\begin{columns}[c]
+			
+			\begin{column}{0.5\textwidth}
+				\centering
+				\includegraphics[width=\textwidth]{images/grid_output.pdf}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Masks used with designated index in the top right (masked region in white).
+					\item In order sap, box, circle and random walk generation methods.
+					\item For each type, filters with masked pixels to total pixels ratio in $\{0.10, 0.25, 0.40\}$ are generated, first not allowing to cross image borders and then permitting it.
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
+	\end{frame}
+	
+	
+	
 	\section{Partial Convolution}
 	\begin{frame}
 		\begin{center}
@@ -82,17 +127,17 @@
 	
 	\begin{frame}{Network Architecture Details}
 		\begin{itemize}
-			\item Each convolution is transformed into a partial convolution.
+			\item Each convolution is transformed into a \textbf{partial} convolution.
 			\item The skip links concatenate two feature maps and two masks respectively, acting as the feature and mask inputs for the next partial convolution layer.
 			\item The last partial convolution layer’s input contains the concatenation of the original input image with hole and original mask, making it possible for the model to copy non-hole pixels.
 		\end{itemize}
 	\end{frame}
 	
 	
-	\begin{frame}{Network Architecture Visualization}
-		\centering
-		\includegraphics[width=0.9\textwidth, height=0.85\textheight]{images/Pconv_net.png}
-	\end{frame}
+	%\begin{frame}{Network Architecture Visualization}
+	%	\centering
+	%	\includegraphics[width=0.9\textwidth, height=0.85\textheight]{images/Pconv_net.png}
+	%\end{frame}
 	
 	
 	\begin{frame}{Loss Function}
@@ -127,8 +172,23 @@
 	\end{frame}
 	
 	
-	\begin{frame}{Results}
-		content...
+	\begin{frame}{Qualitative Results}
+			\begin{columns}[c]
+			
+			\begin{column}{0.65\textwidth}
+				\centering
+				\includegraphics[height=0.8\textheight, width=0.8\linewidth]{images/PConvQResults.png}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Good results for 0.1 corruption ratio, regardless of mask shape.
+					\item Frequent artifacts and colour discrepancies.
+					\item When an object is mostly occluded, it struggles to generate a plausible filling, sometimes completely failing.
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
 	\end{frame}
 	
 	
@@ -214,8 +274,23 @@
 	\end{frame}
 	
 	
-	\begin{frame}{Results}
-		content...
+	\begin{frame}{Qualitative Results}
+					\begin{columns}[c]
+			
+			\begin{column}{0.65\textwidth}
+				\centering
+				\includegraphics[height=0.8\textheight, width=0.8\linewidth]{images/PAttentionQResults.png}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Very good results, even with high SAP corruption.
+					\item When only a small portion of an object is missing it can reconstruct it well.
+					\item If the object is mostly occluded, usually the regenerated portion imitates the "likely" background, effectively editing out the item (even if with some artifacts). 
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
 	\end{frame}
 	
 	

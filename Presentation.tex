@@ -1,0 +1,709 @@
+\documentclass[aspectratio=43]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+
+%import the theme and packages for the code blocks
+\input{code_blocks_theme.tex}
+
+% Use Unipd as theme, with options:
+% - pageofpages: define the separation symbol of the footer page of pages (e.g.: of, di, /, default: of)
+% - logo: position another logo near the Unipd logo in the title page (e.g. department logo), passing the second logo path as option 
+% Use the environment lastframe to add the endframe text
+\usetheme[pageofpages=of]{Unipd}
+
+\title{A Comparative Study of Image Inpainting Methods
+	under Diverse Masking Conditions\\}
+\subtitle{}
+\author[]{Ponchio Mattia, Secco Benedetto}
+
+\date{16th September 2026}
+
+
+\begin{document}
+	\frame{\titlepage}
+	
+	
+	\section{Introduction}
+	\begin{frame}{Image Inpainting}
+		\centering
+		\begin{itemize}
+			\item Image inpainting is the task of filling in holes in an image.
+			\item In non-blind inpainting, the location of the corrupted pixels is provided in order to fill them with plausible imagery.
+			\item Useful to edit out unwanted objects or generate occluded regions.
+			\item Task has been tackled both with traditional methods (e.g. Biharmonic Equations, PatchMatch) and deep learning networks.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Dataset}
+		\centering
+		\begin{itemize}
+			\item We utilize a subset of the Places365 test set, which contains unique imagery related to 365 scene categories.
+			\item In particular, we consider 200 images from the resized test set, where the images have been resized to $256 \times 256$ regardless of the original aspect ratio.
+			\item For \textit{each} image, we consider its combination with each one of our 48 masks, totaling 9600 unique inputs to the networks
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Masks}
+		\begin{columns}[c]
+			
+			\begin{column}{0.5\textwidth}
+				\centering
+				\includegraphics[width=\textwidth]{images/grid_output.pdf}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Masks used with designated index in the top right (masked region in white).
+					\item In order sap, box, circle and random walk generation methods.
+					\item For each type, filters with masked pixels to total pixels ratio in $\{0.10, 0.25, 0.40\}$ are generated, first not allowing to cross image borders and then permitting it.
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
+	\end{frame}
+	
+	% ===========================================================
+	% =============== MASK DESIGN ==============================
+	% ==========================================================
+	\begin{frame}{Mask Design Choice}
+		
+		We evaluate models using masks varying in \textbf{type}, \textbf{corruption ratio}, and \textbf{position} (center vs border).
+		
+		\vspace{0.2cm}
+		
+		\begin{itemize}
+			\item \textbf{SAP (salt-and-pepper):} sparse, independent pixels $\rightarrow$ tests local texture / denoising
+			
+			\item \textbf{Box / Circle:} large contiguous regions $\rightarrow$ tests structural + semantic completion and the effect of boundary geometry (sharp vs smooth)
+			
+			\item \textbf{Random Walk:} irregular, thin connected structures $\rightarrow$ tests long-range context and robustness
+		\end{itemize}
+		
+		\vspace{0.2cm}
+		
+		\textbf{Corruption ratios:} $\{0.10,\;0.25,\;0.40\}$ \hfill
+		\textbf{Position:} center vs border
+		
+	\end{frame}
+	
+	
+	
+	\section{Partial Convolution}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Partial Convolution}}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Goals}
+		\begin{itemize}
+			\item Independent from hole initialization values.
+			\item No expensive post-processing needed.
+			\item Convolution results depend only on the non-hole regions at every layer, with the masked region being automatically updated at each step.
+			\item Handle both regular and irregular shaped holes, regardless of their proximity to the borders of the image.
+			\item We implement a pre-trained model, which was trained on the Places dataset for 500000 iterations.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Partial Convolutional Layer}
+		\begin{center}			
+			\begin{equation*}
+				x' = \begin{cases}
+					\mathbf{W}^T(\mathbf{X}\odot\mathbf{M})\frac{\text{sum}(\mathbf{1})}{\text{sum}(\mathbf{M})} + b,  & \text{if }  \text{sum}(\mathbf{M})>0  \\
+					0,  & \text{otherwise}
+				\end{cases}
+			\end{equation*}
+			\begin{itemize}
+				\item Mask convention: 0 for masked portion.
+				\item Output values depend only on unmasked inputs.
+				\item Scaling factor to adjust for the varying amount of unmasked inputs.
+				\item If the convolution was able to condition its output on at least one valid input value, then that location becomes valid, expressed with:
+			\end{itemize}
+			\begin{equation*}
+					m' = \begin{cases}
+					1,  & \text{if }  \text{sum}(\mathbf{M})>0  \\
+					0,  & \text{otherwise}
+				\end{cases}
+			\end{equation*}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture Inspiration}
+		\centering
+		\includegraphics[scale=0.14]{images/u-net-architecture.png}
+		\begin{itemize}
+			\item UNet-like architecture: Encoder-Decoder with skip connections.
+		\end{itemize}
+		\small
+		\footnote{Image source: Ronneberger, O., Fischer, P., Brox, T.: U-net: Convolutional networks for biomedical image segmentation. Springer (2015)}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture Details}
+		\begin{itemize}
+			\item Each convolution is transformed into a \textbf{partial} convolution.
+			\item The skip links concatenate two feature maps and two masks respectively, acting as the feature and mask inputs for the next partial convolution layer.
+			\item The last partial convolution layer’s input contains the concatenation of the original input image with hole and original mask, making it possible for the model to copy non-hole pixels.
+		\end{itemize}
+	\end{frame}
+	
+	
+	%\begin{frame}{Network Architecture Visualization}
+	%	\centering
+	%	\includegraphics[width=0.9\textwidth, height=0.85\textheight]{images/Pconv_net.png}
+	%\end{frame}
+	
+	
+	\begin{frame}{Loss Function}
+		\centering
+		\begin{equation*}
+				\mathcal{L}_{total} = 
+				\mathcal{L}_{valid} + 6\mathcal{L}_{hole} + 0.05\mathcal{L}_{perceptual}
+				+ 120(\mathcal{L}_{style_{out}} + \mathcal{L}_{style_{comp}}) + 0.1\mathcal{L}_{tv}
+		\end{equation*}
+		\begin{itemize}
+			\item Both pixel-wise and perceptual terms.
+			\item $\mathcal{L}_{hole}$ and $\mathcal{L}_{valid}$ are the $L_1$ losses on the network output for the hole and the non-hole pixels respectively.
+		\begin{equation*}
+			\centering
+			\mathcal{L}_{perceptual} = \sum_{p=0}^{P-1} \frac{\| \Psi_{p}^{\mathbf{I}_{out}} - \Psi_{p}^{\mathbf{I}_{gt}} \|_1}{N_{\Psi_{p}^{\mathbf{I}_{gt}}}}
+			+ \sum_{p=0}^{P-1} \frac{\|  \Psi_{p}^{\mathbf{I}_{comp}} - \Psi_{p}^{\mathbf{I}_{gt}} \|_1}{N_{\Psi_{p}^{\mathbf{I}_{gt}}}}
+		\end{equation*}
+			\item $\mathbf{I}_{comp}$ is the raw output image $\mathbf{I}_{out}$, but with the non-hole pixels directly set to ground truth.
+			\item The perceptual loss computes the $L_1$ distances between both $\mathbf{I}_{out}$ and $\mathbf{I}_{comp}$ and the ground truth, but after projecting these images into higher level feature spaces using an ImageNet pre-trained VGG-16.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Loss function}
+		\centering
+		\begin{itemize}
+			\item The style-loss term is similar to the perceptual loss, but an autocorrelation (Gram matrix) is performed on each feature map before applying the $L_1$.
+			\item As before, $\mathcal{L}_{style_{comp}}$ uses the raw output image but with non-hole pixels set to ground truth.
+			\item The total variation loss $\mathcal{L}_{tv}$ represents the smoothing penalty on $R$, where $R$ is the region of 1-pixel dilation of the hole region, still evaluated using the $L_1$ norm.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Qualitative Results}
+			\begin{columns}[c]
+			
+			\begin{column}{0.65\textwidth}
+				\centering
+				\includegraphics[height=0.8\textheight,width=\columnwidth, keepaspectratio]{images/PConvQResults1.png}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Good results for 0.1 corruption ratio, regardless of mask shape.
+					\item Works well for small occlusions and can remove random noise from sap.
+					\item Harder to reconstruct images in the borders.
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
+	\end{frame}
+	
+		\begin{frame}{Qualitative Results}
+			\centering
+			\includegraphics[height=0.6\textheight, width=0.8\linewidth, keepaspectratio]{images/PConvQResults2.png}
+		
+			\begin{itemize}
+				\item Frequent artifacts and colour discrepancies.
+				\item When an object is mostly occluded, it struggles to generate a plausible filling, sometimes completely failing.
+			\end{itemize}
+
+	\end{frame}
+	
+	
+	\section{Contextual Attention}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Contextual Attention}}
+		\end{center}
+	\end{frame}
+	
+	
+	\begin{frame}{Goals}
+		\centering
+		\begin{itemize}
+			\item Combine the ability of deep learning based approaches to generate visually plausible inpainting with patch synthesis methods's to borrow textures from the surrounding regions.
+			\item Deal with multiple holes at arbitrary locations and with variable sizes.
+			\item Integrate attention mechanism in the network: learn where to borrow or copy feature information from known background patches to generate missing patches.
+			\item We implement a pre-trained model, which was trained on ImageNet for 430000 iterations.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Contextual Attention Layer}
+		\centering
+		\includegraphics[width=\textwidth, height=0.5\textheight]{images/contextual_attention_layer.jpg}
+		\begin{itemize}
+			\item Match features of missing pixels (foreground) to surroundings (background) via cosine similarity $\rightarrow$ weigh it with scaled softmax to get attention score for each pixel.
+			\item Further encourage coherency of attention by propagation $\rightarrow$ left-right followed by a top-down propagation (kernel size k).
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture: $1^{st}$ stage}
+		\centering
+		\includegraphics[width=\textwidth, height=0.35\textheight]{images/framework.jpg}
+		\begin{itemize}
+			\item Two-stage coarse-to-fine network architecture where the first network makes an initial coarse prediction, and the second network takes the coarse prediction as inputs and predict refined results.
+			\item The coarse network is a fully convolutional encoder-decoder architecture with dilated convolutions.
+			\item It is trained with the reconstruction loss explicitly; no $BN$ layers and ELU as activation.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Spatially Discounted Loss}
+		\centering
+		\begin{itemize}
+			\item Since the original image is the only ground truth to compute a reconstruction loss, strong enforcement of reconstruction loss in masked pixels may mislead the training process of the convolutional network.
+			\item Missing pixels near the hole boundaries have much less ambiguity than those pixels closer to the center of the hole.
+			\begin{center}
+				$\downarrow$
+			\end{center}
+			\item Weight mask \(\mathbf{M}\) where the weight of each pixel in the mask is computed as \(\gamma^{\ell}\), where \(\ell\) is the distance of the pixel to the nearest known pixel.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{Network Architecture: $2^{nd}$ stage}
+		\centering
+		\includegraphics[width=\textwidth, height=0.35\textheight]{images/unified_attention_network.jpg}
+		\begin{itemize}
+			\item Two parallel encoders: the bottom encoder specifically focuses on hallucinating contents with layer-by-layer (dilated) convolution, while the top one tries to attend on background features of interest.
+			\item Output features from two encoders are aggregated and fed into a single decoder to obtain the final output.
+			\item Color to indicate the relative location of the most interested background patch for each foreground pixel.
+		\end{itemize}
+	\end{frame}
+	
+	
+	\begin{frame}{$2^{nd}$ stage Loss}
+		\centering
+		\begin{itemize}
+			\item Reconstruction loss and WGAN-GP loss (on both global and local outputs
+			of the second-stage refinement network to enforce global and local consistency).
+			\item The pixel-wise reconstruction loss directly regresses
+			holes to the current ground truth image, while WGANs implicitly learn to match potentially correct images and train the generator with adversarial gradients.
+			\item The gradient penalty (applied only to pixels inside the holes) contributes to preventing mode collapse and balances the two critics.
+			\item No perceptual, style or total variation losses used, as they do not bring noticeable improvements in this case.
+			\begin{equation*}
+				\begin{split}
+					\min_G \max_{D \in \mathcal{D}} & \mathbb{E}_{\mathbf{x} \sim \mathbb{P}_r}[D(\mathbf{x})] - \mathbb{E}_{\tilde{\mathbf{x}} \sim \mathbb{P}_g}[D(\tilde{\mathbf{x}})] \\
+					& + \lambda \mathbb{E}_{\hat{\mathbf{x}} \sim \mathbb{P}_{\hat{\mathbf{x}}}} \left[ \left( \lVert \nabla_{\hat{\mathbf{x}}} D(\hat{\mathbf{x}}) \odot (\mathbf{1} - \mathbf{m}) \rVert_2 - 1 \right)^2 \right]
+				\end{split}
+			\end{equation*}
+		\end{itemize}
+	\end{frame}
+	
+	
+		\begin{frame}{Qualitative Results}
+		\begin{columns}[c]
+			
+			\begin{column}{0.65\textwidth}
+				\centering
+				\includegraphics[height=0.8\textheight,width=\columnwidth, keepaspectratio]{images/PAttentionQResults1.png}
+			\end{column}
+			
+			\begin{column}{0.5\textwidth}
+				\begin{itemize}
+					\item Very good results, even with high SAP corruption.
+					\item When only a small portion of an object is missing it can reconstruct it well.
+					\item Can blend well the inpainted portion with the rest of the image in patches with few colours.
+				\end{itemize}
+			\end{column}
+			
+		\end{columns}
+	\end{frame}
+	
+	\begin{frame}{Qualitative Results}
+		\centering
+		\includegraphics[height=0.6\textheight, width=0.8\linewidth, keepaspectratio]{images/PAttentionQResults2.png}
+		
+		\begin{itemize}
+			\item If the object is mostly occluded, usually the regenerated portion imitates the "likely" background, effectively editing out the item (even if with some artifacts). 
+		\end{itemize}
+	\end{frame}
+	
+		\section{Contextual Attention}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Iizuka Model}}
+		\end{center}
+	\end{frame}
+	
+	
+	% ===========================================================
+	% =============== IIZUKA MODEL ==============================
+	% ===========================================================
+	\begin{frame}{Iizuka Model: Overview}
+		\begin{itemize}
+			\item Two levels: \textbf{completion} + \textbf{discriminator network}
+			\item Three main components:
+			\begin{itemize}
+				\item \textbf{Completion network}: encoder--decoder (fully convolutional)
+				\item \textbf{Global discriminator}: enforces semantic consistency
+				\item \textbf{Local discriminator}: enforces fine details in missing region
+			\end{itemize}
+			\item Encoder: strided convolutions (avoiding pooling $\rightarrow$ less blur)
+			\item Decoder: deconvolutions to restore resolution
+			\item Discriminators outputs combined $\rightarrow$ real vs fake classification
+		\end{itemize}
+		
+		\centering
+		\includegraphics[width=1\linewidth]{images/images_benedetto/iizuka_architecture.png}
+	\end{frame}
+	
+	% ============= LOSS FUNCTIONS =================
+	\begin{frame}{Iizuka Model: Loss Functions}
+		
+		\begin{itemize}
+			\item \textbf{Reconstruction loss:} MSE computed only on missing region
+		\end{itemize}
+		
+		\begin{equation*}
+			L(x, M_c) = \left\| M_c \odot (C(x, M_c) - x) \right\|_2^2
+		\end{equation*}
+		
+		where $x$ is the ground truth image, $C(x, M_c)$ the prediction, $M_c$ the binary mask, and $\odot$ element-wise multiplication.
+		
+		\vspace{0.3cm}
+		
+		\begin{itemize}
+			\item \textbf{Adversarial loss:} 2-player game loss
+		\end{itemize}
+		
+		\begin{equation*}
+			\min_C \max_D \; \mathbb{E}\big[ \log D(x, M_d) + \log(1 - D(C(x, M_c), M_c)) \big]
+		\end{equation*}
+		
+		where $M_d$ is a random mask and $D$ the joint discriminator (global + local).
+		
+		\vspace{0.2cm}
+		By jointly minimizing and maximizing conflicting objectives, reaching stability is hard. So the training strategy is important.
+		
+	\end{frame}
+	
+	% ============== TRAINING ================
+	\begin{frame}{Iizuka Model: Training Strategy}
+		
+		\begin{itemize}
+			\item \textbf{Training} performed in three phases:
+			\begin{itemize}
+				\item Pretrain completion network (reconstruction loss)
+				\item Train discriminators (real vs fake classification)
+				\item Joint adversarial training
+			\end{itemize}
+			
+			\item Masks: random rectangular holes (filled with dataset mean)
+			
+			\item \textbf{Post-processing:} Poisson blending improves boundary continuity, but may introduce color inconsistencies (it preserves gradients, not absolute intensities)
+			
+			\item We used the Iizuka model pre-trained on Places2 dataset ($\sim$8M images, batch size 96)
+		\end{itemize}
+		
+	\end{frame}
+	
+	
+	
+	% ===========================================================
+	% =============== IIZUKA RESULTS ============================
+	% ===========================================================
+	\begin{frame}{Iizuka: Qualitative Results (1)} 
+		\begin{columns}[c] 
+			
+			\begin{column}{0.65\textwidth} 
+				\centering 
+				\includegraphics[height=0.85\textheight, width=0.85\linewidth, keepaspectratio]{images/images_benedetto/all_masks_comparison.png} 
+			\end{column} 
+			
+			\begin{column}{0.6\textwidth} 
+				% Fixed height container matching the image height to distribute items evenly
+				\vbox to 0.6\textheight{
+					\begin{itemize} 
+						\item SAP mask
+						\vfill
+						\item Rectangular mask
+						\vfill
+						\item Circular mask
+						\vfill
+						\item Random walk mask
+					\end{itemize}
+				}
+			\end{column} 
+			
+		\end{columns} 
+	\end{frame}
+	
+	% ============== GOOD COMPARISON ================
+	\begin{frame}{Iizuka: Qualitative Results (2)} 
+		\begin{columns}[c] 
+			
+			\begin{column}{0.65\textwidth} 
+				\centering 
+				\includegraphics[height=1\textheight, width=1\linewidth, keepaspectratio]{images/images_benedetto/good_comparison.png} 
+			\end{column} 
+			
+			\begin{column}{0.5\textwidth} 
+				% Fixed height container matching the image height to distribute items evenly
+				\vbox to 0.6\textheight{
+					\begin{itemize} 
+						\item A good completion
+						\vfill
+						\item Object shape reconstruction
+						\vfill
+						\item Object removal
+					\end{itemize}
+				}
+			\end{column} 
+			
+		\end{columns} 
+	\end{frame}
+	
+	% ============== BAD COMPARISON ================
+	\begin{frame}{Iizuka: Qualitative Results (3)} 
+		\begin{columns}[c] 
+			
+			\begin{column}{0.65\textwidth} 
+				\centering 
+				\includegraphics[height=1\textheight, width=1\linewidth, keepaspectratio]{images/images_benedetto/bad_comparison.png} 
+			\end{column} 
+			
+			\begin{column}{0.5\textwidth} 
+				% Fixed height container matching the image height to distribute items evenly
+				\vbox to 0.7\textheight{
+					\begin{itemize} 
+						\item The presence of structured patterns make artifacts more visible to the human eye
+						\vfill
+						\item Color inconsistencies (bottom left corner)
+						\vfill
+						\item The lack of sufficient boundary constraints in the Poisson formulation can lead to unstable solutions
+					\end{itemize}
+				}
+			\end{column} 
+			
+		\end{columns} 
+	\end{frame}
+	
+	% ============== BLENDING COMPARISON 1 ================
+	\begin{frame}{Iizuka: blending comparison (1)} 
+		\centering 
+		\includegraphics[height=1\textheight, width=1\linewidth, keepaspectratio]{images/images_benedetto/iizuka_blending_comparison_1.png} 
+	\end{frame}
+	
+	% ============== BLENDING COMPARISON 2 ================
+	\begin{frame}{Iizuka: blending comparison (2)} 
+		\centering 
+		\includegraphics[height=1\textheight, width=1\linewidth, keepaspectratio]{images/images_benedetto/iizuka_blending_comparison_2.png} 
+	\end{frame}
+	
+	
+	
+	
+	% ===========================================================
+	% ==================== METRICS ==============================
+	% ===========================================================
+	\begin{frame}{Evaluation Metrics: $L_1$ and PSNR}
+		
+		Given a ground truth image $\mathrm{I}$ and a prediction $\hat{\mathrm{I}}$, both metrics compare them pixel-wise.
+		
+		\begin{itemize}
+			
+			\item \textbf{$L_1$ error:} Mean absolute difference over pixels. 
+			Robust to outliers, but sensitive to small spatial misalignments.
+			
+			$$
+			L_1 = \frac{1}{N} \sum_{i=1}^{N} |\mathrm{I}_i - \hat{\mathrm{I}}_i|
+			$$
+			
+			\item \textbf{PSNR} (Peak Signal-to-Noise Ratio): Based on MSE, thus penalizes large errors more strongly. More sensitive to outliers than $L_1$. Expressed in dB. 
+			
+		\end{itemize}
+		
+		\begin{equation*}
+			MSE = \frac{1}{N} \sum_{i=1}^{N} (\mathrm{I}_i - \hat{\mathrm{I}}_i)^2, 
+			\qquad 
+			PSNR = 10 \log_{10}\left(\frac{MAX^2}{MSE}\right)
+		\end{equation*}
+		
+		\vspace{0.2cm}
+		\textbf{Limitations}: Both are simple and easy to interpret, but do not reflect perceptual quality and are sensitive to misalignment.
+		
+	\end{frame}
+	
+	
+	% ================ SSIM =====================
+	\begin{frame}{Evaluation Metric: SSIM}
+		
+		Given two images $x$ and $y$, \textbf{SSIM (Structural Similarity Index)} measures similarity in terms of perceived structure rather than pixel-wise error. It is computed locally on small patches ($11\times 11$) and averaged over the image.
+		
+		\begin{equation*}
+			SSIM(x,y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
+		\end{equation*}
+		
+		It compares luminance, contrast, and structure by merging the three terms:
+		{\small
+			$$
+			l(x,y) = \frac{2\mu_x \mu_y + C_1}{\mu_x^2 + \mu_y^2 + C_1},
+			\quad
+			c(x,y) = \frac{2\sigma_x \sigma_y + C_2}{\sigma_x^2 + \sigma_y^2 + C_2}
+			\quad
+			s(x,y) = \frac{\sigma_{xy} + C_3}{\sigma_x \sigma_y + C_3}
+			$$
+		}
+		
+		\textbf{Limitations}: still sensitive to misalignment, favors smooth results, and ignores high-level semantics.
+		
+	\end{frame}
+	
+	
+	
+	
+	% ================ LPIPS =====================
+	\begin{frame}{Evaluation Metric: LPIPS}
+		
+		\textbf{LPIPS (Learned Perceptual Image Patch Similarity)} measures perceptual similarity between images $x$ and $x_0$ by comparing deep feature representations extracted from a pretrained CNN (e.g., VGG, AlexNet).
+		
+		\begin{equation*}
+			\text{LPIPS}(x, x_0) =
+			\sum_l w_l \cdot \frac{1}{H_l W_l}
+			\sum_{h,w}
+			\left\| \hat{\phi}_l(x)_{h,w} - \hat{\phi}_l(x_0)_{h,w} \right\|_2^2
+		\end{equation*}
+		
+		Using weights $w_l$, it averages normalized feature differences across multiple layers of the network. 
+		
+		\vspace{0.2cm}
+		\textbf{Limitations:} computationally expensive, but less sensitive to small misalignments.
+		
+		\vspace{0.2cm}
+		\textbf{Common limitation (all metrics):} requires ground-truth images and cannot fully handle the one-to-many nature of inpainting.
+		
+	\end{frame}
+	
+	
+	
+	
+	% ===========================================================
+	% ================ GENERAL RESULTS ==========================
+	% ===========================================================
+	
+	% ============ MASK RATIO ANALYSIS ==================
+	\begin{frame}{Results (1)}
+		
+		\begin{itemize}
+			\item Increasing the corrupted area makes the task more difficult
+			\item For ratios $\leq 0.25$, border and non-border masks perform similarly. For higher ratio, \textbf{bordered masks perform better}. Explanation: borders contain less semantic content than image centers.
+		\end{itemize}
+		
+		\begin{figure}
+			\centering
+			\includegraphics[width=0.85\linewidth]{images/images_benedetto/metrics_vs_ratio.png}
+			%\caption{Metrics as a function of masked pixel ratio. Only Partial Convolution with $L_1$ is shown; other models and metrics show similar trends.}
+			\label{fig:metrics_vs_ratio}
+		\end{figure}
+		
+	\end{frame}
+	
+	
+	% ============== METRICS vs MASKS ================
+	\begin{frame}{Results (2)} 
+		\begin{figure}
+			\centering 
+			\includegraphics[height=1\textheight, width=1\linewidth, keepaspectratio]{images/images_benedetto/metrics_vs_masks.png} 
+			\caption{Mask index order: 1-9 for sap; 10-24 for box; 25-38 for circle; 39-48 for random walk}
+		\end{figure}
+	\end{frame}
+	
+	
+	% ==================== MASK TYPE COMPARISON ==============================
+	\begin{frame}{Effect of Mask Type}
+		
+		\begin{itemize}
+			\item For simple masks (box and circle with small/medium ratios) most models behave similarly (except Partial Convolution).
+			\item For complex masks (SAP, random walk): clearer differences emerge. \textbf{Contextual Attention}: better on sparse noise (SAP). \textbf{Iizuka + blending}: more robust on irregular structures (random walk).
+		\end{itemize}
+		
+		\begin{figure}
+			
+			\centering
+			\includegraphics[width=1\linewidth]{images/images_benedetto/metrics_vs_mask_method.png}
+			%\caption{Model performance across different mask types. Relative rankings vary: differences are small for regular masks, but more pronounced for irregular ones.}
+			\label{fig:mask_type_comparison}
+		\end{figure}
+		
+	\end{frame}
+	
+	
+	
+	% ============== OVERALL TABLE OF METRICS ================
+	\begin{frame}{Results of the metrics} 
+		
+		In the Table below we see the average values of each metrics for each model. The contextual attention model is the best, closely followed by the blending Iizuka.
+		
+		\begin{table}[htbp]
+			\centering
+			%\caption{Mean values for each of the considered metrics}
+			\vspace{5pt}
+			\label{tab:model_comparison}
+			\begin{tabular}{lcccc}
+				\hline
+				\textbf{Model} & \textbf{L1} & \textbf{PSNR} & \textbf{SSIM} & \textbf{LPIPS} \\
+				\hline
+				Standard Iizuka & 0.039 & 21.3 & 0.761 & 0.243 \\
+				Blending Iizuka & 0.044 & 22.0 & 0.813 & 0.192 \\
+				Context. Att.   & \textbf{0.032} & \textbf{23.0} & \textbf{0.817} & \textbf{0.169} \\
+				Partial Conv.   & 0.079 & 18.2 & 0.703 & 0.318 \\
+				\hline
+			\end{tabular}
+		\end{table}
+	\end{frame}
+	
+	
+	
+	
+	
+	% ===========================================================
+	% ================ CONCLUSION ==========================
+	% ===========================================================
+	\begin{frame}{Conclusions}
+		
+		\begin{itemize}
+			\item Inpainting performance strongly depends on \textbf{mask size and structure} $\rightarrow$ task is highly context-dependent.
+			
+			\item \textbf{Partial Convolution}: consistently worst across all metrics.
+			
+			\item \textbf{Best methods}: Contextual Attention and Iizuka (+ blending), with similar overall performance.
+			
+			\item Standard metrics ($L_1$, PSNR, SSIM, LPIPS) have \textbf{limitations}:
+			\vspace{-0.4cm}
+			\begin{itemize}
+				\item Require ground truth
+				\item Cannot capture multiple plausible solutions (one-to-many problem)
+			\end{itemize}
+			
+			\item \textbf{Future work}:
+			\begin{itemize}
+				\item Larger datasets (limited here by time and computation)
+				\item Human evaluation for perceptual quality
+			\end{itemize}
+		\end{itemize}
+		
+	\end{frame}
+	
+	
+	
+\end{document}

@@ -516,6 +516,14 @@
 	% ===========================================================
 	% ==================== METRICS ==============================
 	% ===========================================================
+	\section{Evaluation Metrics}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Evaluation Metrics}}
+		\end{center}
+	\end{frame}
+	
+	
 	\begin{frame}{Evaluation Metrics: $L_1$ and PSNR}
 		
 		Given a ground truth image $\mathrm{I}$ and a prediction $\hat{\mathrm{I}}$, both metrics compare them pixel-wise.
@@ -594,12 +602,16 @@
 		
 	\end{frame}
 	
-	
-	
-	
 	% ===========================================================
 	% ================ GENERAL RESULTS ==========================
 	% ===========================================================
+	
+	\section{Results Comparison}
+	\begin{frame}
+		\begin{center}
+			\Huge{\textbf{Results Comparison}}
+		\end{center}
+	\end{frame}
 	
 	% ============ MASK RATIO ANALYSIS ==================
 	\begin{frame}{Results (1)}
@@ -663,10 +675,26 @@
 				\hline
 				\textbf{Model} & \textbf{L1} & \textbf{PSNR} & \textbf{SSIM} & \textbf{LPIPS} \\
 				\hline
+				Partial Conv.   & 0.079 & 18.2 & 0.703 & 0.318 \\
+				Context. Att.   & \textbf{0.032} & \textbf{23.0} & \textbf{0.817} & \textbf{0.169} \\
 				Standard Iizuka & 0.039 & 21.3 & 0.761 & 0.243 \\
 				Blending Iizuka & 0.044 & 22.0 & 0.813 & 0.192 \\
-				Context. Att.   & \textbf{0.032} & \textbf{23.0} & \textbf{0.817} & \textbf{0.169} \\
-				Partial Conv.   & 0.079 & 18.2 & 0.703 & 0.318 \\
+				\hline
+			\end{tabular}
+		\end{table}
+		
+		\begin{table}[htbp]
+			\centering
+			%\caption{Mean values for each of the considered metrics}
+			\vspace{5pt}
+			\label{tab:model_parameters}
+			\begin{tabular}{lcc}
+				\hline
+				\textbf{Model} & \textbf{Total trainable parameters} & \textbf{Generator only} \\
+				\hline
+				Partial Conv.   & 25.8M & / \\
+				Context. Att.   & 9.0M & 3.6M \\
+				Iizuka model    & 51.2M & 6.1M \\
 				\hline
 			\end{tabular}
 		\end{table}
